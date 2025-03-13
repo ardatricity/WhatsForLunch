@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Soup, Utensils, Salad, Coffee, Star } from 'lucide-react';
-import originalMenuData from './data.json';
+import menuData from './data.json';
 
 interface MenuItem {
     date: string;
@@ -9,20 +9,12 @@ interface MenuItem {
     side_dish: string;
     dessert_drink: string;
     ratings: {
-        votes: { [userId: string]: number };
+        votes: Record<string, number>;
         average: number;
     };
 }
 
 function App() {
-    const [menuData, setMenuData] = useState<any>(() => {
-        const storedMenuData = localStorage.getItem('menuData');
-        if (storedMenuData) {
-            return JSON.parse(storedMenuData);
-        } else {
-            return originalMenuData;
-        }
-    });
     const [currentDate, setCurrentDate] = useState<string>("");
     const [currentMenu, setCurrentMenu] = useState<MenuItem | null>(null);
     const [menuIndex, setMenuIndex] = useState(0);
@@ -44,9 +36,10 @@ function App() {
             setCurrentDate(menu.date);
 
             const userId = localStorage.getItem('userId') || '';
-            setUserRating(menu.ratings.votes[userId] || 0);
+            const userPreviousRating = menu.ratings.votes[userId] || 0;
+            setUserRating(userPreviousRating);
         }
-    }, [menuIndex, menuData]);
+    }, [menuIndex]);
 
     const handlePrevious = () => {
         if (menuIndex > 0) {
@@ -64,38 +57,48 @@ function App() {
         if (!currentMenu) return;
 
         const userId = localStorage.getItem('userId') || '';
+        const updatedMenu = { ...currentMenu };
 
-        const updatedMenus = menuData.menus.map((menu, index) => {
-            if (index === menuIndex) {
-                const updatedVotes = { ...menu.ratings.votes, [userId]: rating };
-                const votesArray = Object.values(updatedVotes);
-                const newAverage = votesArray.length > 0
-                    ? votesArray.reduce((a, b) => a + b, 0) / votesArray.length
-                    : 0;
+        updatedMenu.ratings.votes[userId] = rating;
 
-                return {
-                    ...menu,
-                    ratings: {
-                        votes: updatedVotes,
-                        average: Number(newAverage.toFixed(1))
-                    }
-                };
-            }
-            return menu;
-        });
+        const votes = Object.values(updatedMenu.ratings.votes);
+        const newAverage = votes.length > 0
+            ? votes.reduce((a, b) => a + b, 0) / votes.length
+            : 0;
 
-        const updatedMenuData = { ...menuData, menus: updatedMenus };
-        setMenuData(updatedMenuData);
+        updatedMenu.ratings.average = Number(newAverage.toFixed(1));
 
-        localStorage.setItem('menuData', JSON.stringify(updatedMenuData));
+        setCurrentMenu(updatedMenu);
         setUserRating(rating);
+        setHoveredRating(rating);
+
+        menuData.menus[menuIndex] = updatedMenu;
+        localStorage.setItem('menuData', JSON.stringify(menuData));
     };
 
-    const handleStarHover = (event: React.MouseEvent<HTMLDivElement>, starIndex: number) => {
-        const rect = event.currentTarget.getBoundingClientRect();
-        const x = event.clientX - rect.left;
+    const handleInteraction = (event: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>, starIndex: number) => {
+        const target = event.currentTarget;
+        const rect = target.getBoundingClientRect();
+        let clientX: number;
+
+        if ('touches' in event) {
+            // Touch event
+            clientX = event.touches[0].clientX;
+        } else {
+            // Mouse event
+            clientX = event.clientX;
+        }
+
+        const x = clientX - rect.left;
         const rating = x < rect.width / 2 ? starIndex - 0.5 : starIndex;
-        setHoveredRating(rating);
+
+        if ('touches' in event) {
+            // For touch events, immediately apply the rating
+            handleRating(rating);
+        } else {
+            // For mouse events, just update the hover state
+            setHoveredRating(rating);
+        }
     };
 
     if (!currentMenu) return null;
@@ -108,8 +111,10 @@ function App() {
             <div
                 key={starIndex}
                 className="relative inline-block cursor-pointer"
-                onMouseMove={(e) => handleStarHover(e, starIndex)}
-                onClick={() => handleRating(hoveredRating || userRating)}
+                onMouseMove={(e) => handleInteraction(e, starIndex)}
+                onTouchStart={(e) => handleInteraction(e, starIndex)}
+                onTouchMove={(e) => handleInteraction(e, starIndex)}
+                onClick={() => handleRating(hoveredRating)}
             >
                 <div className="relative w-8 h-8">
                     {/* Base star (outline) */}

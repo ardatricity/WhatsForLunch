@@ -1,39 +1,6 @@
 {
   "menus": [
     {
-      "date": "11.03.2024",
-      "soup": "Mercimek Çorbası",
-      "main_course": "Izgara Köfte",
-      "side_dish": "Pilav",
-      "dessert_drink": "Sütlaç",
-      "ratings": {
-        "votes": {},
-        "average": 0
-      }
-    },
-    {
-      "date": "12.03.2024",
-      "soup": "Ezogelin Çorbası",
-      "main_course": "Tavuk Şiş",
-      "side_dish": "Bulgur Pilavı",
-      "dessert_drink": "Ayran",
-      "ratings": {
-        "votes": {},
-        "average": 0
-      }
-    },
-    {
-      "date": "13.03.2024",
-      "soup": "Yayla Çorbası",
-      "main_course": "Karnıyarık",
-      "side_dish": "Zeytinyağlı Fasulye",
-      "dessert_drink": "Baklava",
-      "ratings": {
-        "votes": {},
-        "average": 0
-      }
-    },
-    {
       "date": "12.03.2025",
       "soup": "YAYLA ÇORBA",
       "main_course": "GARNİTÜRLÜ FIRIN TAVUK",
