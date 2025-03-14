@@ -1,231 +1,283 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Soup, Utensils, Salad, Coffee, Star } from 'lucide-react';
-import menuData from './data.json';
+import { initializeApp } from 'firebase/app';
+import { getFirestore, doc, setDoc, collection, query, getDocs } from 'firebase/firestore';
+
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
 
 interface MenuItem {
-    date: string;
-    soup: string;
-    main_course: string;
-    side_dish: string;
-    dessert_drink: string;
-    ratings: {
-        votes: Record<string, number>;
-        average: number;
-    };
+  date: string;
+  soup: string;
+  main_course: string;
+  side_dish: string;
+  dessert_drink: string;
+  ratings: {
+    votes: Record<string, number>;
+    average: number;
+  };
 }
 
-function App() {
-    const [currentDate, setCurrentDate] = useState<string>("");
-    const [currentMenu, setCurrentMenu] = useState<MenuItem | null>(null);
-    const [menuIndex, setMenuIndex] = useState(0);
-    const [userRating, setUserRating] = useState<number>(0);
-    const [hoveredRating, setHoveredRating] = useState<number>(0);
-    const [isHovering, setIsHovering] = useState(false);
-
-    useEffect(() => {
-        if (!localStorage.getItem('userId')) {
-            localStorage.setItem('userId', Math.random().toString(36).substring(2));
-        }
-        setMenuIndex(menuData.menus.length - 1);
-    }, []);
-
-    useEffect(() => {
-        if (menuIndex >= 0 && menuIndex < menuData.menus.length) {
-            const menu = menuData.menus[menuIndex];
-            setCurrentMenu(menu);
-            setCurrentDate(menu.date);
-
-            const userId = localStorage.getItem('userId') || '';
-            const userPreviousRating = menu.ratings.votes[userId] || 0;
-            setUserRating(userPreviousRating);
-        }
-    }, [menuIndex]);
-
-    const handlePrevious = () => {
-        if (menuIndex > 0) {
-            setMenuIndex(menuIndex - 1);
-        }
+function RatingSystem({
+    currentRating,
+    userRating,
+    totalVotes,
+    onRate
+}: {
+    currentRating: number;
+    userRating: number;
+    totalVotes: number;
+    onRate: (rating: number) => void;
+}) {
+    const handleStarClick = (position: number, event: React.MouseEvent | React.TouchEvent) => {
+        event.preventDefault();
+        const element = event.currentTarget as HTMLButtonElement;
+        const rect = element.getBoundingClientRect();
+        const x = 'touches' in event ? event.touches[0].clientX - rect.left : event.clientX - rect.left;
+        const rating = x < rect.width / 2 ? position - 0.5 : position;
+        onRate(rating);
     };
 
-    const handleNext = () => {
-        if (menuIndex < menuData.menus.length - 1) {
-            setMenuIndex(menuIndex + 1);
-        }
-    };
-
-    const handleRating = (rating: number) => {
-        if (!currentMenu) return;
-
-        const userId = localStorage.getItem('userId') || '';
-        const updatedMenu = { ...currentMenu };
-
-        updatedMenu.ratings.votes[userId] = rating;
-
-        const votes = Object.values(updatedMenu.ratings.votes);
-        const newAverage = votes.length > 0
-            ? votes.reduce((a, b) => a + b, 0) / votes.length
-            : 0;
-
-        updatedMenu.ratings.average = Number(newAverage.toFixed(1));
-
-        setCurrentMenu(updatedMenu);
-        setUserRating(rating);
-        setHoveredRating(rating);
-
-        menuData.menus[menuIndex] = updatedMenu;
-        localStorage.setItem('menuData', JSON.stringify(menuData));
-    };
-
-    const handleInteraction = (event: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>, starIndex: number) => {
-        const target = event.currentTarget;
-        const rect = target.getBoundingClientRect();
-        let clientX: number;
-
-        if ('touches' in event) {
-            // Touch event
-            clientX = event.touches[0].clientX;
-        } else {
-            // Mouse event
-            clientX = event.clientX;
-        }
-
-        const x = clientX - rect.left;
-        const rating = x < rect.width / 2 ? starIndex - 0.5 : starIndex;
-
-        if ('touches' in event) {
-            // For touch events, immediately apply the rating
-            handleRating(rating);
-        } else {
-            // For mouse events, just update the hover state
-            setHoveredRating(rating);
-        }
-    };
-
-    if (!currentMenu) return null;
-
-    const renderStar = (starIndex: number) => {
-        const displayRating = isHovering ? hoveredRating : userRating;
-        const percentage = Math.min(100, Math.max(0, (displayRating - (starIndex - 1)) * 100));
+    const renderStar = (position: number) => {
+        const isUserFilled = position <= userRating;
+        const isAverageFilled = position <= currentRating;
+        const isHalfUserFilled = position - 0.5 === userRating;
 
         return (
-            <div
-                key={starIndex}
-                className="relative inline-block cursor-pointer"
-                onMouseMove={(e) => handleInteraction(e, starIndex)}
-                onTouchStart={(e) => handleInteraction(e, starIndex)}
-                onTouchMove={(e) => handleInteraction(e, starIndex)}
-                onClick={() => handleRating(hoveredRating)}
+            <button
+                key={position}
+                className="w-8 h-8 relative focus:outline-none transform transition-transform duration-100 hover:scale-110"
+                onClick={(e) => handleStarClick(position, e)}
+                onTouchStart={(e) => handleStarClick(position, e)}
+                onTouchMove={(e) => handleStarClick(position, e)}
             >
-                <div className="relative w-8 h-8">
-                    {/* Base star (outline) */}
-                    <Star
-                        className={`absolute w-8 h-8 transition-colors duration-200 ${percentage > 0 ? 'text-yellow-400' : 'text-gray-300'
-                            }`}
-                        strokeWidth={1.5}
-                    />
-
-                    {/* Filled overlay */}
-                    <div
-                        className="absolute inset-0 overflow-hidden transition-all duration-200"
-                        style={{ width: `${percentage}%` }}
-                    >
-                        <Star
-                            className="w-8 h-8 text-yellow-400 fill-yellow-400"
-                            strokeWidth={1.5}
-                        />
-                    </div>
-                </div>
-            </div>
+                <Star
+                    className={`w-full h-full absolute top-0 left-0 
+            ${isUserFilled ? 'fill-[#ffda6b] shadow-sm' : ''} 
+            ${isHalfUserFilled ? 'fill-[#ffda6b] shadow-sm' : ''}
+            text-gray-300`}
+                    style={{
+                        stroke: isAverageFilled ? '#e0a300' : '#ccc',
+                        strokeWidth: 2,
+                        clipPath: isHalfUserFilled ? 'polygon(0 0, 50% 0, 50% 100%, 0 100%)' : 'none',
+                        
+                    }}
+                />
+                 {isHalfUserFilled && (
+          <Star
+            className="w-full h-full absolute top-0 left-0 text-gray-300"
+            style={{
+              clipPath: 'polygon(50% 0, 100% 0, 100% 100%, 50% 100%)',
+              backgroundColor: 'transparent',
+              stroke: isAverageFilled ? '#e0a300' : '#ccc',
+              strokeWidth: 2,
+            }}
+          />
+        )}
+            </button>
         );
     };
 
     return (
-        <div className="min-h-screen bg-gray-50">
-            <div className="max-w-4xl mx-auto p-4">
-                {/* Header */}
-                <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-                    <h1 className="text-3xl font-bold text-center text-gray-800 mb-2">
-                        Günün Menüsü
-                    </h1>
-                    <div className="flex items-center justify-center space-x-4">
-                        <button
-                            onClick={handlePrevious}
-                            disabled={menuIndex === 0}
-                            className="p-2 rounded-full hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            <ChevronLeft className="w-6 h-6" />
-                        </button>
-                        <h2 className="text-xl font-semibold text-gray-700">{currentDate}</h2>
-                        <button
-                            onClick={handleNext}
-                            disabled={menuIndex === menuData.menus.length - 1}
-                            className="p-2 rounded-full hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            <ChevronRight className="w-6 h-6" />
-                        </button>
-                    </div>
+        <div className="bg-white rounded-lg shadow-lg p-4">
+            <div className="flex items-center justify-center space-x-4">
+                <div className="flex space-x-1">
+                    {[1, 2, 3, 4, 5].map(position => renderStar(position))}
                 </div>
-
-                {/* Menu Grid */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                    {/* Soup */}
-                    <div className="bg-white rounded-lg shadow-lg p-6 transform hover:scale-105 transition-transform duration-200">
-                        <div className="flex items-center justify-center mb-4">
-                            <Soup className="w-8 h-8 text-orange-500" />
-                        </div>
-                        <h3 className="text-lg font-semibold text-gray-800 mb-2 text-center">Çorba</h3>
-                        <p className="text-gray-600 text-center">{currentMenu.soup}</p>
-                    </div>
-
-                    {/* Main Course */}
-                    <div className="bg-white rounded-lg shadow-lg p-6 transform hover:scale-105 transition-transform duration-200">
-                        <div className="flex items-center justify-center mb-4">
-                            <Utensils className="w-8 h-8 text-red-500" />
-                        </div>
-                        <h3 className="text-lg font-semibold text-gray-800 mb-2 text-center">Ana Yemek</h3>
-                        <p className="text-gray-600 text-center">{currentMenu.main_course}</p>
-                    </div>
-
-                    {/* Side Dish */}
-                    <div className="bg-white rounded-lg shadow-lg p-6 transform hover:scale-105 transition-transform duration-200">
-                        <div className="flex items-center justify-center mb-4">
-                            <Salad className="w-8 h-8 text-green-500" />
-                        </div>
-                        <h3 className="text-lg font-semibold text-gray-800 mb-2 text-center">Yan Yemek</h3>
-                        <p className="text-gray-600 text-center">{currentMenu.side_dish}</p>
-                    </div>
-
-                    {/* Dessert/Drink */}
-                    <div className="bg-white rounded-lg shadow-lg p-6 transform hover:scale-105 transition-transform duration-200">
-                        <div className="flex items-center justify-center mb-4">
-                            <Coffee className="w-8 h-8 text-purple-500" />
-                        </div>
-                        <h3 className="text-lg font-semibold text-gray-800 mb-2 text-center">Tatlı/İçecek</h3>
-                        <p className="text-gray-600 text-center">{currentMenu.dessert_drink}</p>
-                    </div>
-                </div>
-
-                {/* Rating Section */}
-                <div className="bg-white rounded-lg shadow-lg p-6">
-                    <div
-                        className="flex items-center justify-center space-x-1"
-                        onMouseEnter={() => setIsHovering(true)}
-                        onMouseLeave={() => {
-                            setIsHovering(false);
-                            setHoveredRating(0);
-                        }}
-                    >
-                        <div className="flex space-x-1">
-                            {[1, 2, 3, 4, 5].map((index) => renderStar(index))}
-                        </div>
-                        <div className="ml-4 text-sm text-gray-500">
-                            {currentMenu.ratings.average.toFixed(1)} ({Object.keys(currentMenu.ratings.votes).length})
-                        </div>
-                    </div>
+                <div className="flex items-center space-x-2 text-sm text-gray-600">
+                    <span className="font-semibold">{currentRating.toFixed(1)}</span>
+                    <span>({totalVotes} oy)</span>
                 </div>
             </div>
+            {userRating > 0 && (
+                <div className="text-xs text-center mt-2 text-gray-500">
+                    Puanınız: {userRating.toFixed(1)}
+                </div>
+            )}
         </div>
     );
+}
+
+function App() {
+  const [currentDate, setCurrentDate] = useState<string>("");
+  const [currentMenu, setCurrentMenu] = useState<MenuItem | null>(null);
+  const [menuIndex, setMenuIndex] = useState(0);
+  const [userRating, setUserRating] = useState<number>(0);
+  const [menus, setMenus] = useState<MenuItem[]>([]);
+
+  useEffect(() => {
+    if (!localStorage.getItem('userId')) {
+      localStorage.setItem('userId', Math.random().toString(36).substring(2));
+    }
+    fetchMenus();
+  }, []);
+
+  const fetchMenus = async () => {
+    try {
+      const menusCollection = collection(db, 'menus');
+      const menusSnapshot = await getDocs(query(menusCollection));
+      const menusList: MenuItem[] = [];
+      
+      menusSnapshot.forEach((doc) => {
+        menusList.push(doc.data() as MenuItem);
+      });
+
+	  menusList.sort((a,b) => b[1] - a[1]);
+
+      setMenus(menusList);
+      if (menusList.length > 0) {
+        setMenuIndex(menusList.length-1);
+        setCurrentMenu(menusList[menusList.length-1]);
+        setCurrentDate(menusList[menusList.length-1].date);
+        
+        const userId = localStorage.getItem('userId') || '';
+        const userPreviousRating = menusList[menusList.length-1].ratings.votes[userId] || 0;
+        setUserRating(userPreviousRating);
+      }
+    } catch (error) {
+      console.error("Error fetching menus:", error);
+    }
+  };
+
+  useEffect(() => {
+    if (menus.length > 0 && menuIndex >= 0 && menuIndex < menus.length) {
+      const menu = menus[menuIndex];
+      setCurrentMenu(menu);
+      setCurrentDate(menu.date);
+      
+      const userId = localStorage.getItem('userId') || '';
+      const userPreviousRating = menu.ratings.votes[userId] || 0;
+      setUserRating(userPreviousRating);
+    }
+  }, [menuIndex, menus]);
+
+  const handlePrevious = () => {
+    if (menuIndex > 0) {
+      setMenuIndex(menuIndex - 1);
+    }
+  };
+
+  const handleNext = () => {
+    if (menuIndex < menus.length - 1) {
+      setMenuIndex(menuIndex + 1);
+    }
+  };
+
+  const handleRating = async (rating: number) => {
+    if (!currentMenu) return;
+
+    const userId = localStorage.getItem('userId') || '';
+    const updatedMenu = { ...currentMenu };
+    
+    // Update the vote
+    updatedMenu.ratings.votes[userId] = rating;
+    
+    // Calculate new average
+    const votes = Object.values(updatedMenu.ratings.votes);
+    const newAverage = votes.length > 0 
+      ? votes.reduce((a, b) => a + b, 0) / votes.length 
+      : 0;
+    
+    updatedMenu.ratings.average = Number(newAverage.toFixed(1));
+
+    try {
+      // Update local state first for immediate feedback
+      const updatedMenus = [...menus];
+      updatedMenus[menuIndex] = updatedMenu;
+      setMenus(updatedMenus);
+      setCurrentMenu(updatedMenu);
+      setUserRating(rating);
+
+      // Then update Firebase
+      await setDoc(doc(db, 'menus', updatedMenu.date), updatedMenu);
+    } catch (error) {
+      console.error("Error updating rating:", error);
+      // Revert local state if Firebase update fails
+      fetchMenus();
+    }
+  };
+
+  if (!currentMenu) return null;
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-4xl mx-auto p-4">
+        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+          <h1 className="text-3xl font-bold text-center text-gray-800 mb-2">
+            Günün Menüsü
+          </h1>
+          <div className="flex items-center justify-center space-x-4">
+            <button
+              onClick={handlePrevious}
+              disabled={menuIndex === 0}
+              className="p-2 rounded-full hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ChevronLeft className="w-6 h-6" />
+            </button>
+            <h2 className="text-xl font-semibold text-gray-700">{currentDate}</h2>
+            <button
+              onClick={handleNext}
+              disabled={menuIndex === menus.length - 1}
+              className="p-2 rounded-full hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ChevronRight className="w-6 h-6" />
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <div className="flex items-center justify-center mb-4">
+              <Soup className="w-8 h-8 text-orange-500" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-800 mb-2 text-center">Çorba</h3>
+            <p className="text-gray-600 text-center">{currentMenu.soup}</p>
+          </div>
+
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <div className="flex items-center justify-center mb-4">
+              <Utensils className="w-8 h-8 text-red-500" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-800 mb-2 text-center">Ana Yemek</h3>
+            <p className="text-gray-600 text-center">{currentMenu.main_course}</p>
+          </div>
+
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <div className="flex items-center justify-center mb-4">
+              <Salad className="w-8 h-8 text-green-500" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-800 mb-2 text-center">Yan Yemek</h3>
+            <p className="text-gray-600 text-center">{currentMenu.side_dish}</p>
+          </div>
+
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <div className="flex items-center justify-center mb-4">
+              <Coffee className="w-8 h-8 text-purple-500" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-800 mb-2 text-center">Tatlı/İçecek</h3>
+            <p className="text-gray-600 text-center">{currentMenu.dessert_drink}</p>
+          </div>
+        </div>
+
+        <RatingSystem
+          currentRating={currentMenu.ratings.average}
+          userRating={userRating}
+          totalVotes={Object.keys(currentMenu.ratings.votes).length}
+          onRate={handleRating}
+        />
+      </div>
+    </div>
+  );
 }
 
 export default App;
