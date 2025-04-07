@@ -132,7 +132,13 @@ function App() {
         menusList.push(doc.data() as MenuItem);
       });
 
-	  menusList.sort((a,b) => b[1] - a[1]);
+      const parseDate = (dateString: string): Date => {
+        const [day, month, year] = dateString.split('.').map(Number);
+        // in JavaScript, months are 0-based (0 = January, 1 = February, etc.)
+        return new Date(year, month - 1, day);
+      };
+
+      menusList.sort((a, b) => parseDate(a.date).getTime() - parseDate(b.date).getTime());
 
       setMenus(menusList);
       if (menusList.length > 0) {
